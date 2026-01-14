@@ -15,7 +15,7 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, f"✅ Bot Gemini 2.5 Flash Aktif!\nKirim teks, foto, atau PDF.")
+    bot.reply_to(message, f"✅ Bot Gemini 2.5 Flash Aktif!")
 
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
