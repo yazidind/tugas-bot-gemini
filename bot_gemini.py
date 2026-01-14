@@ -5,7 +5,7 @@ from google import genai
 
 # --- KONFIGURASI ---
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8488063799:AAHWR6zTlfr61WxLO2G3rg3bF8IbjZ2SEz0")
-GEMINI_KEY = os.getenv("GEMINI_KEY", "AIzaSyBwjPptatnfsIYEQuPE_Be7bxgDnn-2WbE")
+GEMINI_KEY = os.getenv("GEMINI_KEY", "AIzaSyBOBcl43s3kzwWUz1u9HUOYSYuBg0EYkuo")
 
 # Inisialisasi Gemini Client (Library Terbaru)
 client = genai.Client(api_key=GEMINI_KEY)
