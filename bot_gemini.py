@@ -9,54 +9,71 @@ GEMINI_KEY = os.getenv("GEMINI_KEY", "AIzaSyBwjPptatnfsIYEQuPE_Be7bxgDnn-2WbE")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-def get_gemini_response(text, image_data=None, mime_type=None):
-    # KUNCI: Kita ganti /v1/ menjadi /v1beta/ karena v1 menolak akunmu
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
-    
+def call_gemini_api(prompt, file_data=None, mime_type=None):
+    # Menggunakan model gemini-3-flash sesuai ketersediaan akunmu di 2026
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key={GEMINI_KEY}"
     headers = {'Content-Type': 'application/json'}
     
-    if image_data:
-        # Jika ada gambar (untuk foto/PDF)
-        image_base64 = base64.b64encode(image_data).decode('utf-8')
+    # Jika ada data file (Gambar atau PDF)
+    if file_data:
+        encoded_file = base64.b64encode(file_data).decode('utf-8')
         payload = {
             "contents": [{
                 "parts": [
-                    {"text": text},
-                    {"inline_data": {"mime_type": mime_type, "data": image_base64}}
+                    {"text": prompt},
+                    {"inline_data": {"mime_type": mime_type, "data": encoded_file}}
                 ]
             }]
         }
     else:
         # Jika hanya teks
         payload = {
-            "contents": [{"parts": [{"text": text}]}]
+            "contents": [{"parts": [{"text": prompt}]}]
         }
-    
-    response = requests.post(url, headers=headers, json=payload)
-    result = response.json()
-    
+
     try:
+        response = requests.post(url, headers=headers, json=payload)
+        result = response.json()
         return result['candidates'][0]['content']['parts'][0]['text']
-    except:
-        return f"Error dari Google: {result.get('error', {}).get('message', 'Format tidak didukung')}"
+    except Exception as e:
+        return f"Error: {str(e)}. Pastikan file tidak terlalu besar."
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "Bot Aktif! Jalur v1beta dipaksa manual. Silakan kirim teks atau gambar.")
+    bot.reply_to(message, "✅ Bot Gemini 3 Flash Aktif!\n\nSaya bisa membantu kamu dengan:\n1. 💬 Tanya Jawab Teks\n2. 🖼️ Analisis Gambar\n3. 📄 Ringkas File PDF")
 
+# Handler untuk Teks
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
-    jawaban = get_gemini_response(message.text)
+    jawaban = call_gemini_api(message.text)
     bot.reply_to(message, jawaban)
 
-@bot.message_handler(content_types=['photo'])
-def handle_photo(message):
-    sent_msg = bot.reply_to(message, "Menganalisis gambar... 📸")
-    file_info = bot.get_file(message.photo[-1].file_id)
-    downloaded_file = bot.download_file(file_info.file_path)
-    
-    jawaban = get_gemini_response("Jelaskan gambar ini", downloaded_file, "image/jpeg")
-    bot.edit_message_text(jawaban, message.chat.id, sent_msg.message_id)
+# Handler untuk Gambar & PDF
+@bot.message_handler(content_types=['photo', 'document'])
+def handle_files(message):
+    try:
+        sent_msg = bot.reply_to(message, "Sedang memproses... ⏳")
+        
+        if message.content_type == 'photo':
+            file_id = message.photo[-1].file_id
+            mime_type = "image/jpeg"
+            prompt = "Tolong jelaskan isi gambar ini dengan detail."
+        elif message.document and message.document.mime_type == 'application/pdf':
+            file_id = message.document.file_id
+            mime_type = "application/pdf"
+            prompt = "Tolong ringkas isi dokumen PDF ini."
+        else:
+            bot.edit_message_text("Maaf, kirim foto atau PDF saja.", message.chat.id, sent_msg.message_id)
+            return
 
-print("Bot standby di v1beta manual...")
+        file_info = bot.get_file(file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        
+        jawaban = call_gemini_api(prompt, downloaded_file, mime_type)
+        bot.edit_message_text(jawaban, message.chat.id, sent_msg.message_id)
+        
+    except Exception as e:
+        bot.reply_to(message, f"Gagal memproses file: {e}")
+
+print("Bot Full Features Gemini 3 Flash is Running...")
 bot.infinity_polling()
