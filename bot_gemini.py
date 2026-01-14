@@ -6,76 +6,77 @@ import google.generativeai as genai
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8248342383:AAHqfK3TqX4U_BL_AHUAY3TO0emLRoObj28")
 GEMINI_KEY = os.getenv("GEMINI_KEY", "AIzaSyBwjPptatnfsIYEQuPE_Be7bxgDnn-2WbE")
 
-# Inisialisasi Gemini
 genai.configure(api_key=GEMINI_KEY)
 
-# Fungsi untuk memilih model yang tersedia
-def get_model():
-    # Daftar model dari yang paling canggih ke yang paling stabil
-    model_names = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro']
+# --- FUNGSI DIAGNOSIS MODEL ---
+def find_best_model():
+    print("Mengecek daftar model yang tersedia...")
+    try:
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        print(f"Model ditemukan: {available_models}")
+        
+        # Urutan prioritas model
+        priorities = ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-1.0-pro']
+        
+        for p in priorities:
+            if p in available_models:
+                print(f"Menggunakan model terbaik: {p}")
+                return p
+        
+        if available_models:
+            print(f"Menggunakan model alternatif: {available_models[0]}")
+            return available_models[0]
+    except Exception as e:
+        print(f"Gagal list_models: {e}")
     
-    for name in model_names:
-        try:
-            m = genai.GenerativeModel(name)
-            # Test kecil untuk memastikan model bisa dipanggil
-            return m
-        except:
-            continue
-    return genai.GenerativeModel('gemini-pro') # Last resort
+    # Fallback jika list_models gagal
+    return 'gemini-1.5-flash'
 
-model = get_model()
+# Inisialisasi Model
+SELECTED_MODEL_NAME = find_best_model()
+model = genai.GenerativeModel(SELECTED_MODEL_NAME)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, f"✅ Bot Aktif menggunakan model: {model.model_name}\n\nKirim teks, foto, atau PDF.")
+    bot.reply_to(message, f"✅ Bot Aktif!\nModel: {SELECTED_MODEL_NAME}")
 
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
     if message.text.startswith('/'): return
-    
     try:
-        sent_msg = bot.reply_to(message, "Berpikir... ⏳")
-        # Menggunakan generate_content secara langsung
+        # Gunakan stream=False untuk kestabilan awal
         response = model.generate_content(message.text)
-        
-        if len(response.text) > 4000:
-            bot.send_message(message.chat.id, response.text[:4000])
-        else:
-            bot.edit_message_text(response.text, message.chat.id, sent_msg.message_id)
+        bot.reply_to(message, response.text)
     except Exception as e:
-        bot.reply_to(message, f"❌ Error API: {str(e)}\nCoba lagi nanti.")
+        bot.reply_to(message, f"❌ Error: {str(e)}")
 
 @bot.message_handler(content_types=['photo', 'document'])
 def handle_files(message):
     try:
-        sent_msg = bot.reply_to(message, "Menganalisis file... ⏳")
+        sent_msg = bot.reply_to(message, "⏳ Memproses...")
         
         if message.content_type == 'photo':
             file_id = message.photo[-1].file_id
             mime_type = "image/jpeg"
-            prompt = message.caption if message.caption else "Jelaskan gambar ini."
         elif message.document and message.document.mime_type == 'application/pdf':
             file_id = message.document.file_id
             mime_type = "application/pdf"
-            prompt = message.caption if message.caption else "Ringkas dokumen ini."
         else:
-            bot.edit_message_text("❌ Gunakan Foto atau PDF.", message.chat.id, sent_msg.message_id)
+            bot.edit_message_text("❌ Kirim Foto/PDF.", message.chat.id, sent_msg.message_id)
             return
 
         file_info = bot.get_file(file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
+        data = bot.download_file(file_info.file_path)
 
-        # Kirim ke Gemini
         response = model.generate_content([
-            prompt,
-            {'mime_type': mime_type, 'data': downloaded_file}
+            message.caption if message.caption else "Analisis ini",
+            {'mime_type': mime_type, 'data': data}
         ])
-
+        
         bot.edit_message_text(response.text, message.chat.id, sent_msg.message_id)
-
     except Exception as e:
         bot.reply_to(message, f"❌ Gagal: {str(e)}")
 
-print(f"Bot berjalan dengan model: {model.model_name}")
+print(f"Bot running with {SELECTED_MODEL_NAME}...")
 bot.infinity_polling()
